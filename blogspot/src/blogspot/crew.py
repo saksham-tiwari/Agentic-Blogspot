@@ -1,9 +1,9 @@
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 from typing import List
 import os
-# If you want to run a snippet of code before or after the crew starts,
 # you can use the @before_kickoff and @after_kickoff decorators
 # https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
 
@@ -25,7 +25,9 @@ class Blogspot():
         return Agent(
             config=self.agents_config['researcher'], # type: ignore[index]
             verbose=True,
-            llm=LLM(model=os.environ.get("MODEL", "groq/llama-3.1-405b-reasoning")),
+            allow_delegation=False, # Removed to prevent 8B model function calling crashes
+            tools=[SerperDevTool()], # ONLY using Serper to prevent Token Limits from crashing!
+            llm=LLM(model=os.environ.get("DRAFTING_MODEL", "groq/llama-3.3-70b-versatile")),
             step_callback=getattr(self, 'step_callback', None)
         )
 
@@ -34,7 +36,18 @@ class Blogspot():
         return Agent(
             config=self.agents_config['reporting_analyst'], # type: ignore[index]
             verbose=True,
-            llm=LLM(model=os.environ.get("MODEL", "groq/llama-3.1-405b-reasoning")),
+            allow_delegation=False,
+            llm=LLM(model=os.environ.get("DRAFTING_MODEL", "groq/llama-3.3-70b-versatile")),
+            step_callback=getattr(self, 'step_callback', None)
+        )
+
+    @agent
+    def editor(self) -> Agent:
+        return Agent(
+            config=self.agents_config['editor'], # type: ignore[index]
+            verbose=True,
+            allow_delegation=False,
+            llm=LLM(model=os.environ.get("DRAFTING_MODEL", "groq/llama-3.3-70b-versatile")),
             step_callback=getattr(self, 'step_callback', None)
         )
 
@@ -52,6 +65,13 @@ class Blogspot():
     def reporting_task(self) -> Task:
         return Task(
             config=self.tasks_config['reporting_task'], # type: ignore[index]
+            callback=getattr(self, 'task_callback', None)
+        )
+
+    @task
+    def editing_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['editing_task'], # type: ignore[index]
             output_file='report.md',
             callback=getattr(self, 'task_callback', None)
         )
@@ -65,10 +85,8 @@ class Blogspot():
         return Crew(
             agents=self.agents, # Automatically created by the @agent decorator
             tasks=self.tasks, # Automatically created by the @task decorator
-            process=Process.sequential,
+            process=Process.sequential, # Reverted to sequential to prevent API Rate Limits
             verbose=True,
             memory=True,  # Added to remember past iterations and avoid repeating work!
             cache=True,   # Caches API responses for speed and cost efficiency
-            # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
         )
-

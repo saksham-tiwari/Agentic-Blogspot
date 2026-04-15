@@ -1,9 +1,12 @@
+# Forced Reboot Trigger
 import streamlit as st
 import os
 from datetime import datetime
 import threading
 import time
 from queue import Queue
+from dotenv import load_dotenv
+load_dotenv() # Force reload environment variables on hot reload!
 from blogspot.crew import Blogspot
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 
@@ -116,26 +119,60 @@ def run_crew_thread(topic_input, q):
     try:
         blog = Blogspot()
         
+        # We manually track the sequence since we enforce Process.sequential
+        task_tracker = {"count": 0}
+        agent_sequence = ["🕵️ Senior Data Researcher", "📊 Reporting Analyst", "✍️ Senior Content Editor"]
+        
         def step_callback(step):
             try:
-                # Capture the precise internal thought processes of the LLM
-                if hasattr(step, 'log'):
-                    q.put(f"🧠 **Thought Action:**\n{step.log.strip()[:300]}...")
-                elif isinstance(step, tuple) and len(step) > 0 and hasattr(step[0], 'log'):
-                    q.put(f"🧠 **Thought Action:**\n{step[0].log.strip()[:300]}...")
+                # Identify which agent is currently acting
+                idx = min(task_tracker['count'], len(agent_sequence)-1)
+                active_agent = agent_sequence[idx]
+                
+                tool_name = ""
+                tool_query = ""
+                thought = ""
+                
+                # Parse the complex LiteLLM / CrewAI Action Tuple
+                if isinstance(step, tuple) and len(step) > 0:
+                    action = step[0]
+                    tool_name = getattr(action, 'tool', '')
+                    tool_query = getattr(action, 'tool_input', '')
+                    thought = getattr(action, 'log', '')
                 else:
-                    q.put("⚙️ *Synthesizing logical parameters...*")
+                    tool_name = getattr(step, 'tool', '')
+                    tool_query = getattr(step, 'tool_input', '')
+                    thought = getattr(step, 'log', '')
+                
+                # Dynamic Logic Parser to feed the UI
+                if tool_name and ("Search" in str(tool_name) or "Serper" in str(tool_name)):
+                    q.put(f"🌐 **[ {active_agent} ] accessing LIVE INTERNET:** Executing Google Search for `{tool_query}`...")
+                elif thought:
+                    clean_thought = thought.replace('`', '').strip()[:250]
+                    q.put(f"🧠 **[ {active_agent} ] Internal Thought:**\n_{clean_thought}_...")
+                else:
+                    q.put(f"⚙️ **[ {active_agent} ]** synthesizing data arrays...")
             except Exception:
-                q.put("⚙️ *Internal processing node engaged...*")
+                pass # Silently drop parser errors to not interrupt the flow
 
         def task_callback(task_output):
-            q.put(f"✅ **MILESTONE COMPLETED! Task Finalized.**")
+            idx = min(task_tracker['count'], len(agent_sequence)-1)
+            active_agent = agent_sequence[idx]
+            
+            q.put(f"✅ **MILESTONE COMPLETED:** {active_agent} has successfully finalized their assignment!")
+            task_tracker["count"] += 1
+            
+            # Don't sleep on the very last task!
+            if task_tracker["count"] < len(agent_sequence):
+                next_agent = agent_sequence[task_tracker['count']]
+                q.put(f"⏳ *Handing off memory context to {next_agent}. Throttling API flow for 20 seconds to bypass TPM limit...*")
+                time.sleep(20)
 
         blog.step_callback = step_callback
         blog.task_callback = task_callback
         
         inputs = {'topic': topic_input, 'current_year': str(datetime.now().year)}
-        q.put("🚀 **Crew Assembled. Initiating global research subroutines...**")
+        q.put("🚀 **Crew Assembled. Handing prompt to the Senior Data Researcher...**")
         
         # This is a blocking process, which is why it's in a background thread
         res = blog.crew().kickoff(inputs=inputs)
