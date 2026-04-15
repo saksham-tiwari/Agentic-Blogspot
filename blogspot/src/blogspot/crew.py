@@ -67,5 +67,8 @@ class Blogspot():
             tasks=self.tasks, # Automatically created by the @task decorator
             process=Process.sequential,
             verbose=True,
+            memory=True,  # Added to remember past iterations and avoid repeating work!
+            cache=True,   # Caches API responses for speed and cost efficiency
             # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
         )
+
