@@ -1,6 +1,6 @@
 researcher:
   role: >
-    {topic} Senior Data Researcher
+    Senior Data Researcher
   goal: >
     Uncover cutting-edge developments in {topic}
   backstory: >
@@ -10,7 +10,7 @@ researcher:
 
 reporting_analyst:
   role: >
-    {topic} Reporting Analyst
+    Technical Reporting Analyst
   goal: >
     Create detailed reports based on {topic} data analysis and research findings
   backstory: >
